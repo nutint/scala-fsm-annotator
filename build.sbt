@@ -12,7 +12,8 @@ lazy val scalaTestVersion = "3.0.5"
 libraryDependencies ++= Seq(
   "org.scalactic" %% "scalactic" % scalaTestVersion % "test",
   "org.scalatest" %% "scalatest" % scalaTestVersion % "test",
-  "org.mockito" % "mockito-all" % "1.8.4" % "test"
+  "org.mockito" % "mockito-all" % "1.8.4" % "test",
+  "org.scala-lang" % "scala-reflect" % scalaVersion.value
 )
 
 

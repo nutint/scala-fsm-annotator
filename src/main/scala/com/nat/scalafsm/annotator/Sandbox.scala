@@ -62,7 +62,7 @@ case object PersonLaidState extends PersonState {
   *   - [.] Test with incompatible types
   *   - [X] Processing
   */
-object Sandbox extends App {
+object Sandbox {
   println("running sandbox")
 
   PersonSitState
