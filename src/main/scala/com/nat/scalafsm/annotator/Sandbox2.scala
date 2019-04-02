@@ -21,6 +21,7 @@ class AParser {
     val annotatedClass: ClassSymbol = runtimeMirror(Thread.currentThread().getContextClassLoader).staticClass(staticClass)
     val stateAnnotation: Option[Annotation] = annotatedClass.annotations.find(isExpectedAnnotation[SANNO])
     val methodAnnotations: List[Annotation] = annotatedClass.info.decls.flatMap(_.annotations.filter(isExpectedAnnotation[TANNO])).toList
+    val subclasses: Set[Symbol] = annotatedClass.knownDirectSubclasses
 
     println(s"stateAnnotation = $stateAnnotation, and methods = $methodAnnotations")
   }
