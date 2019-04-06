@@ -1,6 +1,9 @@
 package com.nat.scalafsm.annotator
 
+import java.io.File
+
 import model._
+import net.sourceforge.plantuml.SourceStringReader
 
 // Usage
 trait PersonState extends State[PersonState]
@@ -33,9 +36,25 @@ case object PersonLaidState extends PersonState {
 
 class Parser[A<:State[A]](diagram: Diagram[A]) {
   def parse: String = {
+    s"""
+       |@startuml
+       |title ${diagram.name}
+       |
+       |$parseInitialStates
+       |$parseNonInitialStates
+       |@enduml
+     """.stripMargin
+  }
+
+  def parseNonInitialStates =
     diagram
       .states
       .map(s => parseState(s))
+      .mkString("\n")
+
+  def parseInitialStates: String = {
+    diagram.initialStates
+      .map(s => s"[*] --> ${s.id}")
       .mkString("\n")
   }
 
@@ -64,11 +83,16 @@ object Sandbox extends App {
 
   val diagram = Diagram[PersonState](
     "Person Pose Diagram",
+    List(PersonSitState),
     List(PersonSitState, PersonStandState, PersonLaidState)
   )
 
   val parser = new Parser[PersonState](diagram)
   val parsedString = parser.parse
   println(s"parsedString = \n$parsedString")
+
+
+  val reader: SourceStringReader = new SourceStringReader(parsedString)
+  reader.generateImage(new File("/Users/nat/Documents/bobalice.png"))
 
 }

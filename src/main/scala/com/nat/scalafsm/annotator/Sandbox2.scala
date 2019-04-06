@@ -79,7 +79,6 @@ object Sandbox2 extends App {
   var source = "@startuml\n"
       source += "Bob -> Alice : hello\n"
       source += "@enduml\n"
-      val reader: SourceStringReader = new SourceStringReader(source)
-
+  val reader: SourceStringReader = new SourceStringReader(source)
   reader.generateImage(new File("/Users/nat/Documents/bobalice.png"))
 }
