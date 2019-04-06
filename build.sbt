@@ -13,7 +13,8 @@ libraryDependencies ++= Seq(
   "org.scalactic" %% "scalactic" % scalaTestVersion % "test",
   "org.scalatest" %% "scalatest" % scalaTestVersion % "test",
   "org.mockito" % "mockito-all" % "1.8.4" % "test",
-  "org.scala-lang" % "scala-reflect" % scalaVersion.value
+  "org.scala-lang" % "scala-reflect" % scalaVersion.value,
+  "net.sourceforge.plantuml" % "plantuml" % "6703"
 )
 
 

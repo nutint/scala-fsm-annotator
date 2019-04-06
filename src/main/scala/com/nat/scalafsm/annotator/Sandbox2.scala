@@ -1,6 +1,10 @@
 package com.nat.scalafsm.annotator
 
 
+import java.io.File
+
+import net.sourceforge.plantuml.SourceStringReader
+
 import scala.annotation.StaticAnnotation
 import scala.reflect.runtime.{universe => u}
 
@@ -70,4 +74,12 @@ object Sandbox2 extends App {
 
   val parser = new AParser
   parser.parse[State2[Int], MethodAnnotation[Int]]("com.nat.scalafsm.annotator.TestClass")
+
+
+  var source = "@startuml\n"
+  source += "Bob -> Alice : hello\n"
+  source += "@enduml\n"
+  val reader: SourceStringReader = new SourceStringReader(source)
+
+  reader.generateImage(new File("/Users/nat/Documents/bobalice.png"))
 }
