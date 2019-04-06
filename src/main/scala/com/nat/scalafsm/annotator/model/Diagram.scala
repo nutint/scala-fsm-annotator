@@ -1,5 +1,6 @@
 package com.nat.scalafsm.annotator.model
 
-case class Diagram(
-//  initialState
+case class Diagram[A<:State[A]](
+  name: String,
+  states: List[A]
 )

@@ -1,8 +1,9 @@
 package com.nat.scalafsm.annotator.model
 
-case class Transition[A](
+
+case class Transition[A<:State[A]](
   name: String,
-  fn: State[A] => State[A],
+  to: A,
   guardCondition: String,
   sideEffect: String
 )
