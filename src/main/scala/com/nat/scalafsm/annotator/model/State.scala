@@ -5,9 +5,12 @@ import scala.util.Try
 
 trait State[A<:State[A]] {
   def name: String
+
+  def id: String
+
   def transitions: List[Transition[A]]
 
-  def processEvent(event: String): Try[A] = Try {
+  def processEvent(event: String): Try[State[A]] = Try {
     transitions
       .find(_.name == event)
       .map(executeTransition)
