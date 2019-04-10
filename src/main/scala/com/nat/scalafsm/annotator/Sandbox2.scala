@@ -23,11 +23,24 @@ class AParser {
   import u._
   def parse[SANNO, TANNO](staticClass: String)(implicit sttag: TypeTag[SANNO], tttag: TypeTag[TANNO]): Unit = {
     val annotatedClass: ClassSymbol = runtimeMirror(Thread.currentThread().getContextClassLoader).staticClass(staticClass)
-    val stateAnnotation: Option[Annotation] = annotatedClass.annotations.find(isExpectedAnnotation[SANNO])
-    val methodAnnotations: List[Annotation] = annotatedClass.info.decls.flatMap(_.annotations.filter(isExpectedAnnotation[TANNO])).toList
+    val stateAnnotation: Option[SANNO] = annotatedClass.annotations.collectFirst{ case s: SANNO => s }
+    val methodAnnotations: List[TANNO] = annotatedClass.info.decls.flatMap(_.annotations.collect{ case t: TANNO => t }).toList
     val subclasses: Set[Symbol] = annotatedClass.knownDirectSubclasses
 
-    println(s"stateAnnotation = $stateAnnotation, and methods = $methodAnnotations")
+    println(s"stateAnnotation = $stateAnnotation, and transitionAnnotation = $methodAnnotations")
+    println(s"stateAnnotation.getClass = ${stateAnnotation.getClass}, and methods.getClass = ${methodAnnotations.getClass}")
+    stateAnnotation
+      .map {
+        // case s: StaticAnnotation => println("Found static annotation")
+        case s: SANNO => println("state2")
+        case _ => println("not found any annotation")
+      }
+
+    methodAnnotations
+      .map {
+        case m: TANNO => println("found Transition")
+        case _ => println("not found transition annotation")
+      }
   }
 
   def isExpectedAnnotation[EXA](annotation: Annotation)(implicit ttag: TypeTag[EXA]): Boolean = {
@@ -76,9 +89,9 @@ object Sandbox2 extends App {
   parser.parse[State2[Int], MethodAnnotation[Int]]("com.nat.scalafsm.annotator.TestClass")
 
 
-  var source = "@startuml\n"
-      source += "Bob -> Alice : hello\n"
-      source += "@enduml\n"
-  val reader: SourceStringReader = new SourceStringReader(source)
-  reader.generateImage(new File("/Users/nat/Documents/bobalice.png"))
+//  var source = "@startuml\n"
+//      source += "Bob -> Alice : hello\n"
+//      source += "@enduml\n"
+//  val reader: SourceStringReader = new SourceStringReader(source)
+//  reader.generateImage(new File("/Users/nat/Documents/bobalice.png"))
 }
