@@ -19,30 +19,62 @@ case class SimpleStateDiagram[A](name: String, initialStates: List[SimpleState[A
 case class SimpleState[A](name: String) extends StaticAnnotation
 case class SimpleTransition[A](name: String) extends StaticAnnotation
 
-@SimpleStateDiagram[WashingMachineState](
-  "Washing Machine State",
+
+case class SimpleStateDiagram2(name: String, initialStates: List[SimpleState2], states: List[SimpleState2]) extends StaticAnnotation
+case class SimpleState2(name: String) extends StaticAnnotation
+case class SimpleTransition2(name: String) extends StaticAnnotation
+
+//@SimpleStateDiagram[WashingMachineState](
+//  "Washing Machine State",
+//  List(
+//    SimpleState[WashingMachineState]("on")
+//  ),
+//  List(
+//    SimpleState[WashingMachineState]("off"),
+//    SimpleState[WashingMachineState]("on")
+//  )
+//)
+@SimpleStateDiagram2(
+  "Washing Machine State2",
   List(
-    SimpleState[WashingMachineState]("on")
+    SimpleState2("off")
   ),
   List(
-    SimpleState[WashingMachineState]("off"),
-    SimpleState[WashingMachineState]("on")
+    SimpleState2("off"),
+    SimpleState2("on")
   )
 )
 sealed trait WashingMachineState
-case class WashingMachineStateOff() extends WashingMachineState
-case class WashingMachineStateOn() extends WashingMachineState
+@SimpleState2("off")
+case class WashingMachineStateOff() extends WashingMachineState {
+  @SimpleTransition("Power On")
+  def powerOn = WashingMachineStateOn
+}
+@SimpleState2("on")
+case class WashingMachineStateOn() extends WashingMachineState {
+  @SimpleTransition2("Power Off")
+  def powerOff = WashingMachineStateOff()
+}
 
 class AParser {
   import u._
   def parse[StateAnnotation, TransitionAnnotation](staticClass: String)(implicit sttag: TypeTag[StateAnnotation], tttag: TypeTag[TransitionAnnotation]): Unit = {
     val annotatedClass: ClassSymbol = runtimeMirror(Thread.currentThread().getContextClassLoader).staticClass(staticClass)
-    val stateAnnotation: Option[StateAnnotation] = annotatedClass.annotations.collectFirst{ case s: SANNO => s }
-    val methodAnnotations: List[TransitionAnnotation] = annotatedClass.info.decls.flatMap(_.annotations.collect{ case t: TANNO => t }).toList
-    val subclasses: Set[Symbol] = annotatedClass.knownDirectSubclasses
+    val stateAnnotation: Option[StateAnnotation] = annotatedClass.annotations.collectFirst{ case s: StateAnnotation => s }
+    val methodAnnotations: List[TransitionAnnotation] = annotatedClass.info.decls.flatMap(_.annotations.collect{ case t: TransitionAnnotation => t }).toList
+    val subclasses: Set[ClassSymbol] = annotatedClass.knownDirectSubclasses.collect{ case sc: ClassSymbol => sc }
 
+    println(s"Subclasses = $subclasses\n")
+
+    subclasses.toList
+        .map(sc => (parseState(sc), parseTransition(sc)))
+        .foreach(println)
+
+    println()
+    
     println(s"stateAnnotation = $stateAnnotation, and transitionAnnotation = $methodAnnotations")
     println(s"stateAnnotation.getClass = ${stateAnnotation.getClass}, and methods.getClass = ${methodAnnotations.getClass}")
+    println()
     stateAnnotation
       .map {
         // case s: StaticAnnotation => println("Found static annotation")
@@ -57,97 +89,30 @@ class AParser {
       }
   }
 
+  def parseTransition[TransitionAnnotation](clazz: ClassSymbol): List[TransitionAnnotation] = {
+    clazz.info.decls
+      .filter(_.isMethod)
+      .toList
+      .flatMap(_.annotations.collect { case ma: TransitionAnnotation => ma })
+  }
+
+  def parseState[StateAnnotation](clazz: ClassSymbol): Option[StateAnnotation] = {
+    clazz.annotations
+      .collectFirst{ case sa: StateAnnotation => sa }
+  }
+
   def mapDebug[A](va: A):A = {
     println(s"mapDebug $va")
     va
   }
 
-  def simpleParse[A](staticClass: String)(implicit sttag: TypeTag[SimpleStateDiagram[A]]) = {
+  def simpleParse[A](staticClass: String)(implicit sttag: TypeTag[SimpleStateDiagram[A]]): STry[SimpleStateDiagram[A]] = {
     getClassSymbol(staticClass)
-      .map(_.annotations.find(isExpectedAnnotation[SimpleStateDiagram[A]]))
+      .map[Option[SimpleStateDiagram[A]]](_.annotations.collectFirst{ case s: SimpleStateDiagram[A] => s })
       .flatMap {
         case Some(ann) => Success(ann)
-        case None =>  Failure(new IllegalArgumentException("Provided class is not annotated"))
+        case None =>  Failure(new IllegalArgumentException(s"Provided class is not annotated to SimpleStateDiagram"))
       }
-      .map[List[Any]](_.tree.children.tail)
-      .map {
-        case _ @ Literal(Constant(nnn)) :: i :: s :: _ => (i, s) match {
-          case (ii: Tree, ss: Tree) => {
-            println()
-//            println(s"name $nnn, matched with $ii, $ss")
-            println()
-            println()
-//            ii.productIterator
-//              .toList.tail
-//              .flatMap(_.asInstanceOf[List[SimpleState[A]]])
-//              .map(_=>SimpleState[A]("xx"))
-//              .map(_.name)
-//              .foreach(println)
-            println()
-            println()
-
-            ii.productIterator
-              .toList.tail
-              .map {
-                case Apply(Select(Ident(TermName(tn1)), TermName("$plus")), List(Literal(Constant(x)))) => println(s"got x = $x")
-                case a => println(s"not matched with $a")
-              }
-
-            println()
-//            (ii.produc, ss.children.tail) match {
-//              case (_ @ Literal(Constant(iii)) :: _, _ @ Literal(Constant(sss)) :: _) => {
-//                println(s"constant $iii, and $sss")
-//              }
-//              case (iii, sss) => {
-//                println(s"xxx with $iii, $sss")
-//                println(Console.RED + s"class analyse = ${iii.getClass}, ${sss.getClass}" + Console.RESET)
-//              }
-//            }
-          }
-          case _ => println(s"not matched")
-        }
-        case _ => println(s"unable to parse literal")
-      }
-//      .map {
-//        case n :: i :: s :: _ => {
-//          println(s"Found $n, $i, $s")
-//          println(s"typeOf ${n.getClass}")
-//          println(s"typeOf ${i.getClass}")
-//          println(s"typeOf ${s.getClass}")
-//
-//          (n, i, s) match {
-//            case (_ @ Literal(Constant(nnn)), ii: Tree, ss: Tree ) => {
-//              println(s"nnn = $nnn")
-//              println(s"typeOf nnn = ${nnn.getClass}")
-//              println(s"ii = ${ii.children}")
-//              println(s"ss = ${ss.children}")
-////              SimpleState[A](nnn, ii.children.tail)
-//            }
-//          }
-//        }
-//        case _ =>
-//          println("not found")
-//      }
-//      .map { _.tree.children.tail match {
-//        case
-//          Literal(Constant(name: String)) ::
-//          Literal(Constant(initial: scala.collection.immutable.List[SimpleState[A]])) ::
-//          Literal(Constant(states: scala.collection.immutable.List[SimpleState[A]])) :: _ => {
-//          println(Console.RED + "got matched" + Console.RESET)
-//          SimpleStateDiagram(name, initial, states)
-//        }
-//        case n :: i :: s :: _ => {
-//          val name = n.value.asInstanceOf[String]
-//          val initial = i.asInstanceOf[List[SimpleState[A]]]
-//          val states = s.asInstanceOf[List[SimpleState[A]]]
-//
-//          SimpleStateDiagram[A](name, initial, states)
-//        }
-//        case x => {
-//          println(Console.RED + s"not matched with $x" + Console.RESET)
-//          SimpleStateDiagram("", Nil, Nil)
-//        }
-//      }}
   }
 
   def getClassSymbol(staticClass: String): STry[ClassSymbol] = STry {
@@ -166,7 +131,7 @@ class AParser {
 }
 
 
-object Sandbox2 extends App {
+object Sandbox2 {
   println("Running sandbox 2")
 
   val myAnnotatedClass: u.ClassSymbol = u.runtimeMirror(Thread.currentThread().getContextClassLoader).staticClass("com.nat.scalafsm.annotator.TestClass")
@@ -213,4 +178,10 @@ object Sandbox2 extends App {
   // Simple Parse
   val simRes = parser.simpleParse[WashingMachineState]("com.nat.scalafsm.annotator.WashingMachineState")
   println(s"simRes = $simRes")
+}
+
+object Sandbox3 extends App {
+  import u._
+  val parser = new AParser()
+  parser.parse[SimpleStateDiagram2, SimpleTransition2]("com.nat.scalafsm.annotator.WashingMachineState")
 }
