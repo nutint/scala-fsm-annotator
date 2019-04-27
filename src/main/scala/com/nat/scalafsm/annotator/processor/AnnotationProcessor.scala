@@ -6,74 +6,138 @@ import scala.reflect.runtime.{universe => u}
 
 class AnnotationProcessor {
   import u._
+  import AnnotationProcessor._
 
-  def parse[A](staticClass: String): MDiagram[A] = {
+  def parse[A](staticClass: String): Either[String,MDiagram[A]] = {
+    parsedDiagram[A](staticClass)
+      .map(_.resolve)
+      .getOrElse(Left(s"Specified class $staticClass is not annotated with Diagram"))
+  }
+
+  def parsedDiagram[A](staticClass: String): Option[UnresolvedDiagram[A]] = {
     val annotatedClass: ClassSymbol = runtimeMirror(Thread.currentThread().getContextClassLoader).staticClass(staticClass)
     val diagramAnnotation: Option[Diagram] = annotatedClass.annotations.collectFirst{ case s: Diagram => s }
     diagramAnnotation.map { diagram =>
       val subclasses = annotatedClass.knownDirectSubclasses.collect({ case sc: ClassSymbol => sc })
-      subclasses
+      UnresolvedDiagram[A](
+        diagram.name,
+        diagram.initialTransitions.map { it =>
+          UnresolvedTransition[A](
+            it.eventName,
+            InitialStateId,
+            InternalStateId(it.nextState),
+            it.guards,
+            it.effects)
+        },
+        subclasses.flatMap(parseState[A]).toList
+      )
     }
-    MDiagram[A]("name", Nil, Nil)
   }
 
-  def parseState[A](classSymbol: ClassSymbol): Option[MState[A]] = {
+  def parseState[A](classSymbol: ClassSymbol): Option[UnresolvedState[A]] = {
     val stateAnnotation = classSymbol.annotations.collectFirst({ case s: State => s})
-    val transitions = parseTransition[A](classSymbol)
-
-    stateAnnotation.map { stateAnno =>
-      new MState[A] {
-        override def name: String = stateAnno.name
-
-        override def id: String = stateAnno.id
-
-        override def transitions: List[MTransition[A]] = transitions.map { transition =>
-          MTransition[A](
-            transition.name,
+    val transitionAnnotations: List[Transition] = classSymbol.info.decls.flatMap(_.annotations.collect{ case t: Transition => t }).toList
+    stateAnnotation.map { foundStateAnnotation =>
+      UnresolvedState[A](
+        foundStateAnnotation.id,
+        foundStateAnnotation.name,
+        transitionAnnotations.map { ta =>
+          UnresolvedTransition[A](
+            ta.eventName,
+            InternalStateId(foundStateAnnotation.id),
+            InternalStateId(ta.nextState),
+            ta.guards,
+            ta.effects
           )
-
-
-//          name: String,
-//          to: State[A],
-//          guardCondition: String,
-//          sideEffect: String
         }
+      )
+    }
+  }
+}
+
+object AnnotationProcessor {
+  case class UnresolvedTransition[A](name: String, from: StateId, to: StateId, guardCondition: List[String], sideEffects: List[String]) {
+    def resolve(states: List[UnresolvedState[A]]): Either[String,MTransition[A]] =
+      states
+        .find(state => to.equal(state.id))
+        .map { targetState =>
+          Right(MTransition[A](
+            name,
+            targetState.id,
+            guardCondition,
+            sideEffects
+          ))
+        }
+        .getOrElse(Left(s"Resolving transition failed: Unable to resolve next state id $to"))
+  }
+
+  case class UnresolvedState[A](id: String, name: String, unresolvedTransitions: List[UnresolvedTransition[A]]) {
+    def resolve(states: List[UnresolvedState[A]]): Either[String, MState[A]] = {
+      unresolvedTransitions
+        .map(_.resolve(states))
+        .foldLeft((List[String](), List[MTransition[A]]())) { (acc, elem) =>
+          elem match {
+            case Left(msg) => acc.copy(_1 = acc._1 :+ msg)
+            case Right(ts) => acc.copy(_2 = acc._2 :+ ts)
+          }
+        } match {
+        case (Nil, tss) => Right(MState[A](id, name, tss))
+        case (errs, _) => Left(s"Resolving state failed: ($id, $name, $errs)")
       }
     }
   }
 
-  def parseTransition[A](classSymbol: ClassSymbol): List[Transition] = {
-    classSymbol.info.decls.flatMap(_.annotations.collect{ case t: Transition => t }).toList
+  case class UnresolvedDiagram[A](name: String, initialTransitions: List[UnresolvedTransition[A]], states: List[UnresolvedState[A]]) {
+    def resolve: Either[String, MDiagram[A]] = {
+      val resolvedStateResult = states
+        .map(_.resolve(states))
+        .foldLeft((
+          List[String](),
+          List[MState[A]]()
+        )) { (acc, elem) => {
+          elem match {
+            case Left(msg) => acc.copy(_1 = acc._1 :+ msg)
+            case Right(ts) => acc.copy(_2 = acc._2 :+ ts)
+          }
+        }
+      } match {
+        case (Nil, ss) => Right(ss)
+        case (errs, _) => Left(s"Resolving State failed: $errs")
+      }
+
+      val resolvedInitialTransitionResult =
+        initialTransitions
+          .map(_.resolve(states))
+          .foldLeft((
+            List[String](),
+            List[MTransition[A]]()
+          )) { (acc, elem) => {
+              elem match {
+                case Left(msg) => acc.copy(_1 = acc._1 :+ msg)
+                case Right(ts) => acc.copy(_2 = acc._2 :+ ts)
+              }
+            }
+          } match {
+          case (Nil, ss) => Right(ss)
+          case (errs, _) => Left(s"Resolving Transitions failed: $errs")
+        }
+
+      (resolvedStateResult, resolvedInitialTransitionResult) match {
+        case (Left(sErrs), Left(tErrs)) => Left(s"Resolving diagram($name) failed with $sErrs, and $tErrs")
+        case (Left(sErrs), _ ) => Left(s"Resolving diagram($name) failed with $sErrs")
+        case (_, Left(tErrs) ) => Left(s"Resolving diagram($name) failed with $tErrs")
+        case (Right(s), Right(t)) => Right(MDiagram[A](name, t, s))
+      }
+    }
   }
 
-  def parse[StateAnnotation, TransitionAnnotation](staticClass: String)(implicit sttag: TypeTag[StateAnnotation], tttag: TypeTag[TransitionAnnotation]): Unit = {
-    val annotatedClass: ClassSymbol = runtimeMirror(Thread.currentThread().getContextClassLoader).staticClass(staticClass)
-    val stateAnnotation: Option[Diagram] = annotatedClass.annotations.collectFirst{ case s: Diagram => s }
-    val methodAnnotations: List[TransitionAnnotation] = annotatedClass.info.decls.flatMap(_.annotations.collect{ case t: TransitionAnnotation => t }).toList
-    val subclasses: Set[ClassSymbol] = annotatedClass.knownDirectSubclasses.collect{ case sc: ClassSymbol => sc }
-
-    println(s"Subclasses = $subclasses\n")
-
-//    subclasses.toList
-//      .map(sc => (parseState(sc), parseTransition(sc)))
-//      .foreach(println)
-
-    println()
-
-    println(s"stateAnnotation = $stateAnnotation, and transitionAnnotation = $methodAnnotations")
-    println(s"stateAnnotation.getClass = ${stateAnnotation.getClass}, and methods.getClass = ${methodAnnotations.getClass}")
-    println()
-    stateAnnotation
-      .map {
-        // case s: StaticAnnotation => println("Found static annotation")
-        case s: StateAnnotation => println("state2")
-        case _ => println("not found any annotation")
-      }
-
-    methodAnnotations
-      .map {
-        case m: TransitionAnnotation => println("found Transition")
-        case _ => println("not found transition annotation")
-      }
+  trait StateId {
+    def equal(id: String): Boolean
+  }
+  case object InitialStateId extends StateId {
+    override def equal(id: String): Boolean = false
+  }
+  case class InternalStateId(id: String) extends StateId {
+    override def equal(rhs: String): Boolean = rhs == id
   }
 }

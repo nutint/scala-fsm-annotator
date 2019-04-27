@@ -14,7 +14,8 @@ libraryDependencies ++= Seq(
   "org.scalatest" %% "scalatest" % scalaTestVersion % "test",
   "org.mockito" % "mockito-all" % "1.8.4" % "test",
   "org.scala-lang" % "scala-reflect" % scalaVersion.value,
-  "net.sourceforge.plantuml" % "plantuml" % "6703"
+  "net.sourceforge.plantuml" % "plantuml" % "6703",
+  "com.chuusai" %% "shapeless" % "2.3.3"
 )
 
 
