@@ -3,7 +3,7 @@ package com.nat.scalafsm.annotator.model
 import scala.util.Try
 
 
-case class State[A<:State[A]](id: String, name: String, transitions: List[Transition[A]]) {
+case class State[A](id: String, name: String, transitions: List[Transition[A]]) {
   def processEvent(event: String): Try[String] = Try {
     transitions
       .find(_.name == event)

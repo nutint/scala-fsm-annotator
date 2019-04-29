@@ -1,6 +1,9 @@
 package com.nat.scalafsm.annotator
 
+import shapeless.Typeable
+
 import scala.annotation.StaticAnnotation
+import scala.reflect.{ClassTag, classTag}
 import scala.reflect.runtime.{universe => u}
 import scala.util.{Failure, Success, Try => STry}
 
@@ -24,16 +27,6 @@ case class SimpleStateDiagram2(name: String, initialStates: List[SimpleState2], 
 case class SimpleState2(name: String) extends StaticAnnotation
 case class SimpleTransition2(name: String) extends StaticAnnotation
 
-//@SimpleStateDiagram[WashingMachineState](
-//  "Washing Machine State",
-//  List(
-//    SimpleState[WashingMachineState]("on")
-//  ),
-//  List(
-//    SimpleState[WashingMachineState]("off"),
-//    SimpleState[WashingMachineState]("on")
-//  )
-//)
 @SimpleStateDiagram2(
   "Washing Machine State2",
   List(
@@ -44,20 +37,65 @@ case class SimpleTransition2(name: String) extends StaticAnnotation
     SimpleState2("on")
   )
 )
-sealed trait WashingMachineState
+sealed trait WashingMachineState2
 @SimpleState2("off")
-case class WashingMachineStateOff() extends WashingMachineState {
+case class WashingMachineState2Off() extends WashingMachineState2 {
   @SimpleTransition("Power On")
-  def powerOn = WashingMachineStateOn
+  def powerOn = WashingMachineState2On
 }
 @SimpleState2("on")
-case class WashingMachineStateOn() extends WashingMachineState {
+case class WashingMachineState2On() extends WashingMachineState2 {
   @SimpleTransition2("Power Off")
-  def powerOff = WashingMachineStateOff()
+  def powerOff = WashingMachineState2Off()
+}
+
+
+@SimpleStateDiagram[FridgeState](
+  "Fridge state",
+  Nil,
+  Nil
+)
+sealed trait FridgeState
+case class FridgeStateOff() extends FridgeState {
+  @SimpleTransition[FridgeState]("Power on")
+  def powerOn = FridgeStateOn()
+}
+case class FridgeStateOn() extends FridgeState {
+  @SimpleTransition[FridgeState]("Power off")
+  def powerOff = FridgeStateOff()
 }
 
 class AParser {
   import u._
+  import shapeless.syntax.typeable._
+
+  def parse3[A](staticClass: String)(implicit tt: Typeable[A], st: Typeable[SimpleStateDiagram[A]]) = {
+    val annotatedClass: ClassSymbol = runtimeMirror(Thread.currentThread().getContextClassLoader).staticClass(staticClass)
+    val diagramAnnotationnn: Option[StaticAnnotation] = annotatedClass.annotations.head.cast[StaticAnnotation]
+    println(s"diagram.head = ${annotatedClass.annotations.head}")
+    println(s"diagramAnnotationnn = $diagramAnnotationnn")
+    val diagramAnnotation: Option[StaticAnnotation] =
+      annotatedClass.annotations
+        .collectFirst{
+          case s if s.isInstanceOf[SimpleStateDiagram[A]] => s.asInstanceOf[SimpleStateDiagram[A]]
+          case s: SimpleStateDiagram[A] => s
+          case s if s.cast[SimpleStateDiagram[A]].nonEmpty => s.cast[SimpleStateDiagram[A]].get
+          case s: StaticAnnotation => s
+          case s if s.cast[StaticAnnotation].nonEmpty => s.cast[StaticAnnotation].get
+        }
+    println(s"diagramAnnotation = $diagramAnnotation")
+  }
+
+  def toSimpleStateDiagram[A](an: Annotation)(implicit tt: Typeable[A]): Option[SimpleStateDiagram[A]] = {
+    val res = an.cast[SimpleStateDiagram[A]]
+    println(s"res = $res")
+    res
+  }
+
+  def toSimple[A](san: StaticAnnotation): Option[SimpleStateDiagram[A]] = {
+    san.cast[SimpleStateDiagram[A]]
+  }
+
   def parse[StateAnnotation, TransitionAnnotation](staticClass: String)(implicit sttag: TypeTag[StateAnnotation], tttag: TypeTag[TransitionAnnotation]): Unit = {
     val annotatedClass: ClassSymbol = runtimeMirror(Thread.currentThread().getContextClassLoader).staticClass(staticClass)
     val stateAnnotation: Option[StateAnnotation] = annotatedClass.annotations.collectFirst{ case s: StateAnnotation => s }
@@ -71,7 +109,7 @@ class AParser {
         .foreach(println)
 
     println()
-    
+
     println(s"stateAnnotation = $stateAnnotation, and transitionAnnotation = $methodAnnotations")
     println(s"stateAnnotation.getClass = ${stateAnnotation.getClass}, and methods.getClass = ${methodAnnotations.getClass}")
     println()
@@ -171,17 +209,47 @@ object Sandbox2 {
     .map(_.toString)
     .foreach(c => println(s"got class symbol = $c"))
 
-  val tpe: u.Type = u.typeOf[WashingMachineState]
+  val tpe: u.Type = u.typeOf[WashingMachineState2]
 
 
 
   // Simple Parse
-  val simRes = parser.simpleParse[WashingMachineState]("com.nat.scalafsm.annotator.WashingMachineState")
+  val simRes = parser.simpleParse[WashingMachineState2]("com.nat.scalafsm.annotator.WashingMachineState2")
   println(s"simRes = $simRes")
 }
 
-object Sandbox3 extends App {
+object Sandbox3U extends App {
   import u._
   val parser = new AParser()
-  parser.parse[SimpleStateDiagram2, SimpleTransition2]("com.nat.scalafsm.annotator.WashingMachineState")
+//  parser.parse[SimpleStateDiagram2, SimpleTransition2]("com.nat.scalafsm.annotator.WashingMachineState2")
+
+
+
+  parser.parse3[FridgeState]("com.nat.scalafsm.annotator.FridgeState")
+
+  import shapeless.syntax.typeable._
+  def checkType[A](any: Any)(implicit tt: Typeable[A]): List[A] = {
+    any.cast[List[A]].get
+  }
+
+  println(checkType[String](List("123")))
+  println(checkType[SimpleStateDiagram[FridgeState]](List(SimpleStateDiagram[FridgeState]("xx", Nil, Nil))))
+
+  val fridgeClass = parser.getClassSymbol("com.nat.scalafsm.annotator.FridgeState").map(_.annotations)
+      .map{ anns =>
+        println(s"anns = $anns")
+        anns.map { ann =>
+          parser.toSimpleStateDiagram[FridgeState](ann)
+        }
+        .foreach(println)
+      }
+
+  val an: StaticAnnotation = SimpleStateDiagram[FridgeState]("xx", Nil, Nil)
+
+  def toSimple[A](san: StaticAnnotation): Option[SimpleStateDiagram[A]] = {
+    san.cast[SimpleStateDiagram[A]]
+  }
+
+  println(toSimple[FridgeState](an))
+
 }

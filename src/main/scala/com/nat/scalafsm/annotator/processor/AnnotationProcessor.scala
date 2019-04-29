@@ -14,9 +14,85 @@ class AnnotationProcessor {
       .getOrElse(Left(s"Specified class $staticClass is not annotated with Diagram"))
   }
 
-  def parsedDiagram[A](staticClass: String): Option[UnresolvedDiagram[A]] = {
+  def isDiagramAnnotation(a: u.Annotation): Boolean = {
+    a match {
+      case s: com.nat.scalafsm.annotator.api.Diagram => {
+        println("is diagram")
+        true
+      }
+      case _ => {
+        println("is not diagram")
+        false
+      }
+    }
+  }
+
+  def toDiagram(a: u.Annotation): Diagram = {
+    a.asInstanceOf[com.nat.scalafsm.annotator.api.Diagram]
+  }
+
+  def parse2[SDiagram](staticClass: String)(implicit sttag: TypeTag[SDiagram]): Unit = {
     val annotatedClass: ClassSymbol = runtimeMirror(Thread.currentThread().getContextClassLoader).staticClass(staticClass)
-    val diagramAnnotation: Option[Diagram] = annotatedClass.annotations.collectFirst{ case s: Diagram => s }
+    val stateAnnotation: Option[SDiagram] = annotatedClass.annotations.collectFirst { case s: SDiagram => s }
+    println(s"stateAnnotation = $stateAnnotation")
+//    val methodAnnotations: List[TransitionAnnotation] = annotatedClass.info.decls.flatMap(_.annotations.collect { case t: TransitionAnnotation => t }).toList
+//    val subclasses: Set[ClassSymbol] = annotatedClass.knownDirectSubclasses.collect { case sc: ClassSymbol => sc }
+  }
+
+  def findAnnotation[A, DAnnotation](staticClass: String)(implicit sttag: TypeTag[DAnnotation]): Option[DAnnotation] = {
+    val annotatedClass: ClassSymbol = runtimeMirror(Thread.currentThread().getContextClassLoader).staticClass(staticClass)
+    annotatedClass.annotations.collectFirst{ case s: DAnnotation => s }
+  }
+
+  def findAnnotation2[A](staticClass: String)(implicit sttag: TypeTag[Diagram], stag: TypeTag[String]): Option[Diagram] = {
+    val annotatedClass: ClassSymbol = runtimeMirror(Thread.currentThread().getContextClassLoader).staticClass(staticClass)
+
+    val mirror = runtimeMirror(cls.getClassLoader)
+    val clsSymbol = mirror.staticClass(cls.getCanonicalName)
+    val annotations = clsSymbol.annotations
+
+    val res = ListBuffer[T]()
+    annotatedClass.annotations.find{_.tree.tpe =:= u.typeOf[Diagram]}
+      .map { a =>
+        println("tail = " + a.tree.children.tail)
+//        a.tree.children.tail.head match {
+//          case Literal(Constant(name: String)) => Diagram(name, Nil)
+//          case _ => Diagram("aaa", Nil)
+//        }
+//
+//        a.tree.children.tail.tail.head match {
+//          case Literal(Constant(ts: List[Transition @unchecked])) => Diagram("xx", ts)
+//          case _ => Diagram("aaa", Nil)
+//        }
+//        val children = a.tree.children
+//        Diagram(children.head, children.tail.head)
+
+        val anntCls = a.tree.tpe.typeSymbol.asClass
+        val classMirror = mirror.reflectClass(anntCls)
+        val anntType = annt.tree.tpe
+        val constructor = anntType.decl(termNames.CONSTRUCTOR).asMethod
+        val constructorMirror = classMirror.reflectConstructor(constructor)
+        val instance = a.tree match {
+          case Apply(c, args: List[Tree]) =>
+            val res = args.collect( {
+              case i: Tree =>
+                i match {
+                  case Literal(Constant(value)) =>
+                    value
+                }
+            })
+            constrctor
+        }
+      }
+  }
+
+  def parsedDiagram[A](staticClass: String)(implicit sttag: TypeTag[Diagram]): Option[UnresolvedDiagram[A]] = {
+    val annotatedClass: ClassSymbol = runtimeMirror(Thread.currentThread().getContextClassLoader).staticClass(staticClass)
+    println(s"annotatedClass = ${annotatedClass.annotations}")
+//    println(s"toDiagram = ${toDiagram(annotatedClass.annotations.head)}")
+//    val diagramAnnotation: Option[Diagram] = annotatedClass.annotations.collectFirst{ case s: Diagram => s }
+    val diagramAnnotation: Option[Diagram] = findAnnotation2[A](staticClass)
+    println(s"diagramAnnotation = $diagramAnnotation")
     diagramAnnotation.map { diagram =>
       val subclasses = annotatedClass.knownDirectSubclasses.collect({ case sc: ClassSymbol => sc })
       UnresolvedDiagram[A](
